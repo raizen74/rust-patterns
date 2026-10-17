@@ -4,7 +4,9 @@ mod new_type;
 mod parse_not_validate;
 mod type_classes;
 mod typestate;
+mod closures;
 
+use closures::closures_pattern;
 use iterator_chaining::{
     SubscriptionEvent, SubscriptionType, analyze_recent_subscriptions, process_subscription_events,
 };
@@ -106,4 +108,5 @@ fn main() {
         analyze_recent_subscriptions(events, 1500)
     );
     type_classes_pattern();
+    closures_pattern();
 }
