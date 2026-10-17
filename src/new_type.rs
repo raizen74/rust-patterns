@@ -14,12 +14,12 @@ impl TopicId {
     pub fn new(topic: impl AsRef<str>) -> Result<Self> {
         let topic = topic.as_ref();
         if topic.is_empty() {
-            return Err(CustomError::Broker(
+            return Err(CustomError(
                 "Topic name cannot be empty".to_string(),
             ));
         }
         if topic.len() > 128 {
-            return Err(CustomError::Broker(format!(
+            return Err(CustomError(format!(
                 "Topic name too long: {} chars (max 128)",
                 topic.len()
             )));
