@@ -1,6 +1,6 @@
 # Rust Patterns
 
-This crate demonstrates Rust patterns for making invalid states harder to represent and for composing data processing: the NewType pattern, the TypeState pattern, validation when parsing or constructing configuration, iterator chaining, closure composition, and staged message processing.
+This crate demonstrates Rust patterns for making invalid states harder to represent and for composing data processing: the NewType pattern, the TypeState pattern, smart constructors, validation when parsing or constructing configuration, iterator chaining, closure composition, and staged message processing.
 
 ## NewType
 
@@ -65,6 +65,49 @@ let config = BrokerConfigBuilder::new()
 ```
 
 The constructors enforce the rules in this example: maximum connections must be positive, buffer size must be non-zero, and the port must be greater than 1023. After construction, `BrokerConfig` stores the validated types rather than the original raw integers, so its getters can return values without repeating those checks. Failures are returned as `ConfigError`.
+
+## Smart Constructors
+
+The smart-constructor pattern hides the representation of a valid value and exposes a constructor that validates raw input before producing it. In `smart_constructors.rs`, `SubscriptionRequest::validate` consumes a request and returns `Result<ValidatedSubscriptionRequest, CustomError>`. The validated wrapper can then be converted into an `ActiveSubscription` with `TryFrom`. This makes validation a required step before creating the active value.
+
+The request-processing function combines iterator adapters with `Option` and `Result`:
+
+```rust
+requests
+    .into_iter()
+    .filter_map(|request| {
+        if request.topic.contains("..") || request.topic.starts_with('/') {
+            None
+        } else {
+            Some(request)
+        }
+    })
+    .map(|request| request.validate())
+    .filter_map(|result| result.ok())
+    .map(ActiveSubscription::try_from)
+    // fold the conversion results into successes and errors
+```
+
+The first `filter_map` uses `Option` to exclude topics that fail the quick pre-filter. Validation returns a `Result`; `Result::ok` converts it to an `Option`, allowing the next iterator stage to keep only successful validations. `TryFrom` also returns a `Result`, and the final `fold` accumulates its successful subscriptions and conversion errors into separate vectors.
+
+There is an important consequence in the current implementation: `.filter_map(|result| result.ok())` discards validation errors, and the pre-filter also drops rejected requests without recording why. Thus the returned error vector contains conversion errors only; validation failures do not reach the `fold`. To preserve validation errors while composing the `Result` steps, chain validation and conversion with `and_then` and fold those results directly:
+
+```rust
+.map(|request| {
+    request
+        .validate()
+        .and_then(ActiveSubscription::try_from)
+})
+.fold((Vec::new(), Vec::new()), |(mut successes, mut errors), result| {
+    match result {
+        Ok(subscription) => successes.push(subscription),
+        Err(error) => errors.push(error),
+    }
+    (successes, errors)
+})
+```
+
+This keeps validation and conversion failures as `Err` values through the iterator chain, so the fold can collect them rather than silently dropping them. The `Option` pre-filter can still intentionally skip requests, or it can be changed to produce an explicit error if those rejections should also be reported.
 
 ## Iterator Chaining
 

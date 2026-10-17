@@ -4,6 +4,7 @@ mod iterator_chaining;
 mod new_type;
 mod parse_not_validate;
 mod pipeline;
+mod smart_constructors;
 mod type_classes;
 mod typestate;
 
@@ -14,6 +15,7 @@ use iterator_chaining::{
 use new_type::{ConsumerId, MessageId, TopicId};
 use parse_not_validate::{BrokerConfigBuilder, ConfigError};
 use pipeline::pipeline_processing_pattern;
+use smart_constructors::smart_constructors_pattern;
 use type_classes::type_classes_pattern;
 use typestate::{
     ConnectedConsumer, ConnectionInfo, Consumer, DisconnectedConsumer, PausedConsumer,
@@ -118,5 +120,6 @@ fn main() {
         Err(e) => {
             eprintln!("Error processing pipeline: {:?}", e);
         }
-    }
+    };
+    smart_constructors_pattern(100, "topic".to_string(), 1);
 }
