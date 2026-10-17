@@ -1,6 +1,6 @@
 # Rust Patterns
 
-This crate demonstrates three Rust patterns for making invalid states harder to represent: the NewType pattern, the TypeState pattern, and validation when parsing or constructing configuration.
+This crate demonstrates Rust patterns for making invalid states harder to represent and for composing data processing: the NewType pattern, the TypeState pattern, validation when parsing or constructing configuration, and iterator chaining with domain-specific operations.
 
 ## NewType
 
@@ -42,6 +42,33 @@ let config = BrokerConfigBuilder::new()
 ```
 
 The constructors enforce the rules in this example: maximum connections must be positive, buffer size must be non-zero, and the port must be greater than 1023. After construction, `BrokerConfig` stores the validated types rather than the original raw integers, so its getters can return values without repeating those checks. Failures are returned as `ConfigError`.
+
+## Iterator Chaining
+
+`SubscriptionProcessing` is an extension trait that gives iterators over `SubscriptionEvent` domain-specific operations: `recent_events` filters by timestamp, `valid_subscriptions` keeps valid subscribe events, and `count_by_topic` aggregates event counts into a `HashMap`.
+
+The blanket implementation applies the trait to every type `I` that implements `Iterator<Item = SubscriptionEvent>`:
+
+```rust
+impl<I> SubscriptionProcessing for I
+where
+    I: Iterator<Item = SubscriptionEvent>,
+{
+    // Trait methods are implemented for all matching iterators.
+}
+```
+
+This means callers can use the methods on any matching iterator without defining a wrapper type or writing a separate trait implementation for each iterator. The filtering methods return opaque `impl Iterator` values, so they compose lazily without boxing. `count_by_topic` is a terminal operation: it consumes the iterator and folds its events into a map.
+
+```rust
+let counts = events
+    .into_iter()
+    .recent_events(cutoff_timestamp)
+    .valid_subscriptions()
+    .count_by_topic();
+```
+
+The blanket implementation requires only the iterator item type; it does not require the iterator to be `'static`, so iterators borrowing data can also use the extension methods when their item type matches.
 
 ## Run
 
