@@ -6,6 +6,10 @@ use std::fmt;
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct TopicId(String);
 
+/// Consumer identifier for tracking individual consumers
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub struct ConsumerId(String);
+
 /// Message identifier for tracking individual messages
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct MessageId(u64);
@@ -14,9 +18,7 @@ impl TopicId {
     pub fn new(topic: impl AsRef<str>) -> Result<Self> {
         let topic = topic.as_ref();
         if topic.is_empty() {
-            return Err(CustomError(
-                "Topic name cannot be empty".to_string(),
-            ));
+            return Err(CustomError("Topic name cannot be empty".to_string()));
         }
         if topic.len() > 128 {
             return Err(CustomError(format!(
@@ -25,6 +27,19 @@ impl TopicId {
             )));
         }
         Ok(TopicId(topic.to_string()))
+    }
+    pub fn as_str(&self) -> &str {
+        &self.0
+    }
+}
+
+impl ConsumerId {
+    pub fn new(id: impl AsRef<str>) -> Result<Self> {
+        let id = id.as_ref();
+        if id.is_empty() {
+            return Err(CustomError("Consumer ID cannot be empty".to_string()));
+        }
+        Ok(ConsumerId(id.to_string()))
     }
     pub fn as_str(&self) -> &str {
         &self.0
