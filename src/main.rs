@@ -1,10 +1,11 @@
+mod closures;
 mod error;
 mod iterator_chaining;
 mod new_type;
 mod parse_not_validate;
+mod pipeline;
 mod type_classes;
 mod typestate;
-mod closures;
 
 use closures::closures_pattern;
 use iterator_chaining::{
@@ -12,6 +13,7 @@ use iterator_chaining::{
 };
 use new_type::{ConsumerId, MessageId, TopicId};
 use parse_not_validate::{BrokerConfigBuilder, ConfigError};
+use pipeline::pipeline_processing_pattern;
 use type_classes::type_classes_pattern;
 use typestate::{
     ConnectedConsumer, ConnectionInfo, Consumer, DisconnectedConsumer, PausedConsumer,
@@ -109,4 +111,12 @@ fn main() {
     );
     type_classes_pattern();
     closures_pattern();
+    match pipeline_processing_pattern() {
+        Ok(processed_messages) => {
+            println!("Pipeline processed messages: {:#?}", processed_messages);
+        }
+        Err(e) => {
+            eprintln!("Error processing pipeline: {:?}", e);
+        }
+    }
 }

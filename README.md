@@ -1,6 +1,6 @@
 # Rust Patterns
 
-This crate demonstrates Rust patterns for making invalid states harder to represent and for composing data processing: the NewType pattern, the TypeState pattern, validation when parsing or constructing configuration, and iterator chaining with domain-specific operations.
+This crate demonstrates Rust patterns for making invalid states harder to represent and for composing data processing: the NewType pattern, the TypeState pattern, validation when parsing or constructing configuration, iterator chaining, closure composition, and staged message processing.
 
 ## NewType
 
@@ -92,6 +92,45 @@ let counts = events
 ```
 
 The blanket implementation requires only the iterator item type; it does not require the iterator to be `'static`, so iterators borrowing data can also use the extension methods when their item type matches.
+
+## Closure Composition
+
+The closures pattern wraps predicates in `MessageFilter<F>`, where `F` is the predicate's concrete closure type and implements `Fn(&Message) -> bool`. The `and` method composes two filters by capturing them in a new closure. The resulting filter matches only when both predicates match, and its descriptive name combines the names of the original filters.
+
+```rust
+let topic_filter = MessageFilter::new("Topic is events".to_string(), |message: &Message| {
+    message.topic == "events"
+});
+let key_filter = MessageFilter::new("Key is user123".to_string(), |message: &Message| {
+    message.key.as_deref() == Some("user123")
+});
+let combined = topic_filter.and(key_filter);
+
+if combined.matches(&message) {
+    // Both predicates matched.
+}
+```
+
+Because each closure has its own compiler-generated type, the generic `MessageFilter<F>` retains the concrete type without boxing. `and` returns another filter with an opaque `impl Fn` predicate, hiding the nested closure type while keeping static dispatch. Its use of `&&` also short-circuits: the second predicate runs only if the first matches.
+
+## Message Processing Pipeline
+
+The pipeline models each processing stage with a different type: `RawMessage` is validated into `ValidatedMessage`, transformed into `TransformedMessage`, then enriched into `ProcessedMessage`. Each stage consumes its input and returns either the next stage or an error, so invalid or incomplete messages stop progressing through the pipeline.
+
+For a batch, `process_message_batch` maps each raw message through those stages and collects the results:
+
+```rust
+messages
+    .into_iter()
+    .map(|message| -> Result<ProcessedMessage> {
+        let validated = message.validate()?;
+        let transformed = validated.transform()?;
+        transformed.enrich()
+    })
+    .collect()
+```
+
+Here, `Result<Vec<ProcessedMessage>>` means all messages must succeed to produce the vector. Collecting an iterator of `Result` values short-circuits at the first error; it does not gather every message error. This keeps error propagation simple, but if a batch should report all failures, the processing loop must instead collect successes and errors separately (or return a dedicated aggregate error type).
 
 ## Run
 
