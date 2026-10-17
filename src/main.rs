@@ -2,11 +2,15 @@ mod error;
 mod iterator_chaining;
 mod new_type;
 mod parse_not_validate;
+mod type_classes;
 mod typestate;
 
-use iterator_chaining::{SubscriptionEvent, SubscriptionType, analyze_recent_subscriptions, process_subscription_events};
+use iterator_chaining::{
+    SubscriptionEvent, SubscriptionType, analyze_recent_subscriptions, process_subscription_events,
+};
 use new_type::{ConsumerId, MessageId, TopicId};
 use parse_not_validate::{BrokerConfigBuilder, ConfigError};
+use type_classes::type_classes_pattern;
 use typestate::{
     ConnectedConsumer, ConnectionInfo, Consumer, DisconnectedConsumer, PausedConsumer,
     SubscribedConsumer,
@@ -101,4 +105,5 @@ fn main() {
         "Recent subscriptions: {:?}",
         analyze_recent_subscriptions(events, 1500)
     );
+    type_classes_pattern();
 }
