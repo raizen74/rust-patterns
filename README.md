@@ -15,7 +15,7 @@ let consumer = ConsumerId::new("worker-1")?;
 
 ## TypeState
 
-TypeState encodes an object's lifecycle state in its type. Here, `Consumer<State>` uses marker types such as `Disconnected`, `Connected`, `Subscribed`, and `Paused`. Each state has only the methods valid for that state:
+TypeState encodes an object's lifecycle state in its type. Here, `Consumer<State>` uses marker types such as `Disconnected`, `Connected`, `Subscribed`, and `Paused`. Each parameterized type by state implements the methods valid for that state:
 
 ```rust
 let consumer = Consumer::new(consumer_id); // Disconnected
@@ -28,6 +28,29 @@ let disconnected = connected.disconnect();
 ```
 
 For example, `subscribe` is implemented for `Consumer<Connected>`, not `Consumer<Disconnected>`. Trying to subscribe before connecting is consequently a compile-time error. `PhantomData<State>` carries the state in the type without storing a runtime state value. Some checks still happen at runtime: `connect` returns an error if the broker address is empty.
+
+This approach keeps invalid transitions out of the API, but operations are attached to concrete state-specific `impl` blocks. When multiple states share a capability, code that uses that capability generically needs an abstraction describing it. The next pattern adds that abstraction with traits.
+
+## Type Classes
+
+Type Classes are a combination of a Trait and an Associated Type. In this example, “type classes” are modeled with Rust traits that describe capabilities a subscription state supports. `Activatable`, `Suspendable`, and `Cancellable` each define an operation, and their associated `Output` type records the state produced by a successful transition.
+
+For example, both `Subscription<Pending>` and `Subscription<Suspended>` implement `Activatable`, and both transition to `Subscription<Active>`. Both `Subscription<Active>` and `Subscription<Suspended>` implement `Cancellable`, each producing `Subscription<Cancelled>`. Code can therefore be generic over the capability instead of being written separately for each input state:
+
+```rust
+fn cancel_subscription_with_audit<S>(
+    subscription: Subscription<S>,
+    reason: String,
+) -> Subscription<Cancelled>
+where
+    Subscription<S>: Cancellable<Output = Subscription<Cancelled>>,
+{
+    println!("Auditing cancellation of subscription {}: {}", subscription.id, reason);
+    subscription.cancel(reason)
+}
+```
+
+Compared with the basic TypeState example, this makes shared operations explicit and lets **generic functions accept any state that implements the required capability** via trait bounds. The compiler still checks which transitions are supported, and the associated output keeps the resulting state in the type. It does not eliminate state-specific implementations: each supported state still needs an implementation of its capability, and a new state must opt into the capabilities it supports. The improvement is that shared behavior and generic algorithms can be expressed in terms of those capabilities rather than duplicating callers for each state.
 
 ## Validation at the Parsing Stage
 
