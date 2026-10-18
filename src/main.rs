@@ -7,7 +7,9 @@ mod pipeline;
 mod smart_constructors;
 mod type_classes;
 mod typestate;
+mod pattern_matching_pattern;
 
+use pattern_matching_pattern::pattern_matching_pattern;
 use closures::closures_pattern;
 use iterator_chaining::iterator_chaining_pattern;
 use new_type::{MessageId, TopicId, new_type_pattern};
@@ -22,6 +24,7 @@ fn main() {
     parse_not_validate_pattern(100, 1024, 8080).unwrap();
     type_state_pattern().unwrap();
     type_classes_pattern();
+    pattern_matching_pattern();
     iterator_chaining_pattern();
     closures_pattern();
     match pipeline_processing_pattern() {

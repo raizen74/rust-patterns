@@ -62,7 +62,7 @@ impl TransformedMessage {
         })
     }
 }
-
+// Error composition, each stage can fail fast
 fn process_message_batch(messages: Vec<RawMessage>) -> Result<Vec<ProcessedMessage>> {
     messages
         .into_iter()
@@ -83,13 +83,13 @@ pub fn pipeline_processing_pattern() -> Result<Vec<ProcessedMessage>> {
                 .cloned()
                 .collect(),
         },
-        // RawMessage {
-        //     data: b"".to_vec(),
-        //     headers: [("topic".to_string(), "errors".to_string())]
-        //         .iter()
-        //         .cloned()
-        //         .collect(),
-        // },
+        RawMessage {
+            data: b"".to_vec(),
+            headers: [("topic".to_string(), "errors".to_string())]
+                .iter()
+                .cloned()
+                .collect(),
+        },
     ];
     let processed_messages = process_message_batch(messages)?;
     println!("Processed messages: {:#?}", processed_messages);

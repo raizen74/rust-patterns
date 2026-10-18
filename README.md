@@ -1,6 +1,6 @@
 # Rust Patterns
 
-This crate demonstrates Rust patterns for making invalid states harder to represent and for composing data processing: the NewType pattern, the TypeState pattern, smart constructors, validation when parsing or constructing configuration, iterator chaining, closure composition, and staged message processing.
+This crate demonstrates Rust patterns for making invalid states harder to represent and for composing data processing: the NewType pattern, the TypeState pattern, smart constructors, validation when parsing or constructing configuration, pattern matching, iterator chaining, closure composition, and staged message processing.
 
 ## NewType
 
@@ -136,6 +136,34 @@ let counts = events
 
 The blanket implementation requires only the iterator item type; it does not require the iterator to be `'static`, so iterators borrowing data can also use the extension methods when their item type matches.
 
+## Pattern Matching and Exhaustiveness
+
+`pattern_matching_pattern.rs` routes a `RichMessage` by matching several values together: its priority, content variant, and topic. Tuple patterns make combinations clear, while guards handle conditions such as long text on system topics or binary content larger than 10 KB.
+
+```rust
+match (&self.priority, &self.content, self.topic.as_str()) {
+    (Priority::Critical, _, _) => ProcessingResult::Processed,
+    (Priority::High, MessageContent::Text(text), topic)
+        if topic.starts_with("system.") =>
+    {
+        if text.len() > 1000 {
+            ProcessingResult::Queued
+        } else {
+            ProcessingResult::Processed
+        }
+    }
+    (_, MessageContent::Binary(data), _) if data.len() > 10240 => {
+        ProcessingResult::Queued
+    }
+    (_, MessageContent::Empty, _) => {
+        ProcessingResult::Rejected("Empty content not allowed".to_string())
+    }
+    _ => ProcessingResult::Processed,
+}
+```
+
+Rust checks that a `match` covers every possible input, preventing an unhandled case from being reached at runtime. In this implementation, the final `_` arm handles all remaining combinations, so the match is exhaustive. That catch-all is convenient, but it also means adding a new `Priority` or `MessageContent` variant will not necessarily produce a compiler error here. For stronger change detection, handle the remaining enum variants explicitly (using a fallback only for combinations that genuinely share behavior), so new variants require the routing logic to be revisited. Match arm order also matters: the critical-priority arm comes first and wins before the other rules are considered.
+
 ## Closure Composition
 
 The closures pattern wraps predicates in `MessageFilter<F>`, where `F` is the predicate's concrete closure type and implements `Fn(&Message) -> bool`. The `and` method composes two filters by capturing them in a new closure. The resulting filter matches only when both predicates match, and its descriptive name combines the names of the original filters.
@@ -158,7 +186,18 @@ Because each closure has its own compiler-generated type, the generic `MessageFi
 
 ## Message Processing Pipeline
 
-The pipeline models each processing stage with a different type: `RawMessage` is validated into `ValidatedMessage`, transformed into `TransformedMessage`, then enriched into `ProcessedMessage`. Each stage consumes its input and returns either the next stage or an error, so invalid or incomplete messages stop progressing through the pipeline.
+The pipeline models each processing stage with a different type: `RawMessage` is validated into `ValidatedMessage`, transformed into `TransformedMessage`, then enriched into `ProcessedMessage`. Each stage consumes its input and returns `Result<NextStage, CustomError>`, so invalid or incomplete messages stop progressing through the pipeline.
+
+This is a form of **monadic composition**: `Result::and_then` feeds a successful value into the next fallible function, while passing an `Err` through without invoking later stages. In this code, all stages use the same error type (`CustomError`), so they compose directly:
+
+```rust
+let processed = message
+    .validate()
+    .and_then(ValidatedMessage::transform)
+    .and_then(TransformedMessage::enrich);
+```
+
+The `?` operator used in `process_message_batch` is the more ergonomic spelling for this kind of sequential composition. Each `?` unwraps an `Ok` value for the next stage or returns the error from the current closure immediately. If pipeline stages use different error types, convert them to a common error type (for example with `map_err` or `From`) before composing them.
 
 For a batch, `process_message_batch` maps each raw message through those stages and collects the results:
 
@@ -173,7 +212,7 @@ messages
     .collect()
 ```
 
-Here, `Result<Vec<ProcessedMessage>>` means all messages must succeed to produce the vector. Collecting an iterator of `Result` values short-circuits at the first error; it does not gather every message error. This keeps error propagation simple, but if a batch should report all failures, the processing loop must instead collect successes and errors separately (or return a dedicated aggregate error type).
+Here, `Result<Vec<ProcessedMessage>>` means all messages must succeed to produce the vector. Collecting an iterator of `Result` values short-circuits at the first error; it does not gather every message error. Thus the `Result` composition handles failure within each message, and `collect()` propagates the first failed message for the batch. This keeps error propagation simple, but if a batch should report all failures, the processing loop must instead collect successes and errors separately (or return a dedicated aggregate error type).
 
 ## Run
 
