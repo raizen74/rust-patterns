@@ -134,3 +134,23 @@ set"
         })
     }
 }
+
+// BrokerConfigBuilder struct holds ows types already validated: PositiveU32, NonZeroUsize, NetworkPort
+pub fn parse_not_validate_pattern(
+    max_connections: u32,
+    buffer_size: usize,
+    port: u16,
+) -> Result<(), ConfigError> {
+    let config = BrokerConfigBuilder::new()
+        .max_connections(max_connections)?
+        .buffer_size(buffer_size)?
+        .port(port)?
+        .build()?;
+    println!(
+        "BrokerConfig: max_connections={}, buffer_size={}, port={}",
+        config.max_connections(),
+        config.buffer_size(),
+        config.port()
+    );
+    Ok(())
+}

@@ -1,5 +1,5 @@
 // src/new_type.rs
-use crate::error::{CustomError, Result};
+use crate::error::{self, CustomError};
 
 use std::fmt;
 /// Topic identifier for tracking individual topics
@@ -15,7 +15,7 @@ pub struct ConsumerId(String);
 pub struct MessageId(u64);
 
 impl TopicId {
-    pub fn new(topic: impl AsRef<str>) -> Result<Self> {
+    pub fn new(topic: impl AsRef<str>) -> error::Result<Self> {
         let topic = topic.as_ref();
         if topic.is_empty() {
             return Err(CustomError("Topic name cannot be empty".to_string()));
@@ -34,7 +34,7 @@ impl TopicId {
 }
 
 impl ConsumerId {
-    pub fn new(id: impl AsRef<str>) -> Result<Self> {
+    pub fn new(id: impl AsRef<str>) -> error::Result<Self> {
         let id = id.as_ref();
         if id.is_empty() {
             return Err(CustomError("Consumer ID cannot be empty".to_string()));
@@ -65,4 +65,10 @@ impl fmt::Display for MessageId {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "{}", self.0)
     }
+}
+
+// message does not accept u64, topic only accepts TopicId
+pub fn new_type_pattern(message: MessageId, topic: TopicId) -> Result<(), CustomError> {
+    println!("Pushing message {} to {}", message, topic);
+    Ok(())
 }

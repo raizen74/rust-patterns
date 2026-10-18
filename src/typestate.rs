@@ -1,4 +1,4 @@
-use crate::error::{CustomError, Result};
+use crate::error::{self, CustomError};
 use crate::new_type::{ConsumerId, TopicId};
 use std::marker::PhantomData;
 
@@ -54,7 +54,7 @@ impl Consumer<states::Disconnected> {
         }
     }
     // A disconnected consumer only implements connect
-    pub fn connect(self, connection_info: ConnectionInfo) -> Result<ConnectedConsumer> {
+    pub fn connect(self, connection_info: ConnectionInfo) -> error::Result<ConnectedConsumer> {
         if connection_info.broker_address.is_empty() {
             return Err(CustomError("Empty broker address".to_string()));
         }
@@ -69,7 +69,7 @@ impl Consumer<states::Disconnected> {
 
 // A connected consumer can transition to 2 states: Subscribed or Disconnected
 impl Consumer<states::Connected> {
-    pub fn subscribe(mut self, topic: TopicId) -> Result<SubscribedConsumer> {
+    pub fn subscribe(mut self, topic: TopicId) -> error::Result<SubscribedConsumer> {
         self.topic = Some(topic);
         Ok(Consumer {
             topic: self.topic,
@@ -119,4 +119,26 @@ impl Consumer<states::Paused> {
             state: PhantomData,
         }
     }
+}
+
+pub fn type_state_pattern() -> Result<(), CustomError> {
+    let consumer_id = ConsumerId::new("test-consumer")?;
+    let topic = TopicId::new("events")?;
+    // Create disconnected consumer
+    let consumer = Consumer::new(consumer_id);
+    println!("DisconnectedConsumer: {:#?}", consumer);
+    // consumer.subscribe(topic); // Error: not available on Disconnected
+    // Connect with connection info
+    let connection_info = ConnectionInfo::new("localhost:9092".to_string(), None);
+    let connected = consumer.connect(connection_info)?;
+    println!("ConnectedConsumer: {:#?}", connected);
+    // Subscribe to topic
+    let subscribed = connected.subscribe(topic)?;
+    // Can pause and resume
+    let paused = subscribed.pause();
+    let subscribed = paused.resume();
+    // Unsubscribe and disconnect
+    let connected = subscribed.unsubscribe();
+    let _disconnected = connected.disconnect();
+    Ok(())
 }
