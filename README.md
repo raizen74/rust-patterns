@@ -1,6 +1,19 @@
-# Rust Patterns
+
+
+# Rust Patterns <!-- omit from toc -->
 
 This crate demonstrates Rust patterns for making invalid states harder to represent and for composing data processing: the NewType pattern, the TypeState pattern, smart constructors, validation when parsing or constructing configuration, pattern matching, iterator chaining, closure composition, and staged message processing.
+
+- [NewType](#newtype)
+- [TypeState](#typestate)
+- [Type Classes](#type-classes)
+- [Validation at the Parsing Stage](#validation-at-the-parsing-stage)
+- [Smart Constructors](#smart-constructors)
+- [Iterator Chaining](#iterator-chaining)
+- [Closure Composition](#closure-composition)
+- [Message Processing Pipeline](#message-processing-pipeline)
+- [Pattern Matching and Exhaustiveness](#pattern-matching-and-exhaustiveness)
+- [Run](#run)
 
 ## NewType
 
@@ -33,9 +46,9 @@ This approach keeps invalid transitions out of the API, but operations are attac
 
 ## Type Classes
 
-Type Classes are a combination of a Trait and an Associated Type. In this example, “type classes” are modeled with Rust traits that describe capabilities a subscription state supports. `Activatable`, `Suspendable`, and `Cancellable` each define an operation, and their associated `Output` type records the state produced by a successful transition.
+Type Classes are a combination of a Trait and an Associated Type. In this example, “type classes” are modeled with Rust traits that describe capabilities a generic `Subscription<S>` supports. `Activatable`, `Suspendable`, and `Cancellable` each define an operation, and their **Associated Type** `Output` records the state produced by a successful transition.
 
-For example, both `Subscription<Pending>` and `Subscription<Suspended>` implement `Activatable`, and both transition to `Subscription<Active>`. Both `Subscription<Active>` and `Subscription<Suspended>` implement `Cancellable`, each producing `Subscription<Cancelled>`. Code can therefore be generic over the capability instead of being written separately for each input state:
+For example, both `Subscription<Pending>` and `Subscription<Suspended>` implement `Activatable`, and both transition to `Subscription<Active>`. Both `Subscription<Active>` and `Subscription<Suspended>` implement `Cancellable`, each producing `Subscription<Cancelled>`. Code can therefore be **generic** over the capability `Activatable`, `Suspendable`, and `Cancellable` instead of being written separately for each input state:
 
 ```rust
 fn cancel_subscription_with_audit<S>(
@@ -50,7 +63,7 @@ where
 }
 ```
 
-Compared with the basic TypeState example, this makes shared operations explicit and lets **generic functions accept any state that implements the required capability** via trait bounds. The compiler still checks which transitions are supported, and the associated output keeps the resulting state in the type. It does not eliminate state-specific implementations: each supported state still needs an implementation of its capability, and a new state must opt into the capabilities it supports. The improvement is that shared behavior and generic algorithms can be expressed in terms of those capabilities rather than duplicating callers for each state.
+Compared with the basic TypeState example, this makes shared operations explicit and lets **generic functions accept any state that implements the required capability** via trait bounds. The compiler still checks which transitions are supported, and the associated `Output` type keeps the resulting state in the type. It does not eliminate state-specific implementations: each supported state still needs an implementation of its capability, and a new state must opt into the capabilities it supports. The improvement is that shared behavior and **generic algorithms can be expressed in terms of those capabilities** rather than duplicating callers for each state.
 
 ## Validation at the Parsing Stage
 
@@ -136,34 +149,6 @@ let counts = events
 
 The blanket implementation requires only the iterator item type; it does not require the iterator to be `'static`, so iterators borrowing data can also use the extension methods when their item type matches.
 
-## Pattern Matching and Exhaustiveness
-
-`pattern_matching_pattern.rs` routes a `RichMessage` by matching several values together: its priority, content variant, and topic. Tuple patterns make combinations clear, while guards handle conditions such as long text on system topics or binary content larger than 10 KB.
-
-```rust
-match (&self.priority, &self.content, self.topic.as_str()) {
-    (Priority::Critical, _, _) => ProcessingResult::Processed,
-    (Priority::High, MessageContent::Text(text), topic)
-        if topic.starts_with("system.") =>
-    {
-        if text.len() > 1000 {
-            ProcessingResult::Queued
-        } else {
-            ProcessingResult::Processed
-        }
-    }
-    (_, MessageContent::Binary(data), _) if data.len() > 10240 => {
-        ProcessingResult::Queued
-    }
-    (_, MessageContent::Empty, _) => {
-        ProcessingResult::Rejected("Empty content not allowed".to_string())
-    }
-    _ => ProcessingResult::Processed,
-}
-```
-
-Rust checks that a `match` covers every possible input, preventing an unhandled case from being reached at runtime. In this implementation, the final `_` arm handles all remaining combinations, so the match is exhaustive. That catch-all is convenient, but it also means adding a new `Priority` or `MessageContent` variant will not necessarily produce a compiler error here. For stronger change detection, handle the remaining enum variants explicitly (using a fallback only for combinations that genuinely share behavior), so new variants require the routing logic to be revisited. Match arm order also matters: the critical-priority arm comes first and wins before the other rules are considered.
-
 ## Closure Composition
 
 The closures pattern wraps predicates in `MessageFilter<F>`, where `F` is the predicate's concrete closure type and implements `Fn(&Message) -> bool`. The `and` method composes two filters by capturing them in a new closure. The resulting filter matches only when both predicates match, and its descriptive name combines the names of the original filters.
@@ -213,6 +198,50 @@ messages
 ```
 
 Here, `Result<Vec<ProcessedMessage>>` means all messages must succeed to produce the vector. Collecting an iterator of `Result` values short-circuits at the first error; it does not gather every message error. Thus the `Result` composition handles failure within each message, and `collect()` propagates the first failed message for the batch. This keeps error propagation simple, but if a batch should report all failures, the processing loop must instead collect successes and errors separately (or return a dedicated aggregate error type).
+
+The example also provides `process_message_batch_with_failure`, which continues after an individual message fails and returns `(Vec<ProcessedMessage>, Vec<CustomError>)`. It still composes that message's fallible stages with `and_then`; the difference is that the outer loop handles each final `Result` instead of propagating it out of the whole batch:
+
+```rust
+let result = message
+    .validate()
+    .and_then(|validated| validated.transform())
+    .and_then(|transformed| transformed.enrich());
+
+match result {
+    Ok(message) => processed.push(message),
+    Err(error) => errors.push(error),
+}
+```
+
+This is **error composition** within each pipeline, paired with error accumulation across the batch. In the demo, the valid message is retained and the empty message contributes an `Empty message` error; the separate fail-fast call still returns an error for the batch.
+
+## Pattern Matching and Exhaustiveness
+
+`pattern_matching_pattern.rs` routes a `RichMessage` by matching several values together: its priority, content variant, and topic. Tuple patterns make combinations clear, while guards handle conditions such as long text on system topics or binary content larger than 10 KB.
+
+```rust
+match (&self.priority, &self.content, self.topic.as_str()) {
+    (Priority::Critical, _, _) => ProcessingResult::Processed,
+    (Priority::High, MessageContent::Text(text), topic)
+        if topic.starts_with("system.") =>
+    {
+        if text.len() > 1000 {
+            ProcessingResult::Queued
+        } else {
+            ProcessingResult::Processed
+        }
+    }
+    (_, MessageContent::Binary(data), _) if data.len() > 10240 => {
+        ProcessingResult::Queued
+    }
+    (_, MessageContent::Empty, _) => {
+        ProcessingResult::Rejected("Empty content not allowed".to_string())
+    }
+    _ => ProcessingResult::Processed,
+}
+```
+
+Rust checks that a `match` covers every possible input, preventing an unhandled case from being reached at runtime. In this implementation, the final `_` arm handles all remaining combinations, so the match is exhaustive. That catch-all is convenient, but it also means adding a new `Priority` or `MessageContent` variant will not necessarily produce a compiler error here. For stronger change detection, handle the remaining enum variants explicitly (using a fallback only for combinations that genuinely share behavior), so new variants require the routing logic to be revisited. Match arm order also matters: the critical-priority arm comes first and wins before the other rules are considered.
 
 ## Run
 

@@ -1,6 +1,6 @@
 use crate::error::{CustomError, Result};
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 struct RawMessage {
     data: Vec<u8>,
     headers: std::collections::HashMap<String, String>,
@@ -74,6 +74,27 @@ fn process_message_batch(messages: Vec<RawMessage>) -> Result<Vec<ProcessedMessa
         .collect()
 }
 
+fn process_message_batch_with_failure(
+    messages: Vec<RawMessage>,
+) -> (Vec<ProcessedMessage>, Vec<CustomError>) {
+    let mut processed = Vec::new();
+    let mut errors = Vec::new();
+
+    for message in messages {
+        let result = message
+            .validate()
+            .and_then(|validated| validated.transform())
+            .and_then(|transformed| transformed.enrich());
+
+        match result {
+            Ok(message) => processed.push(message),
+            Err(error) => errors.push(error),
+        }
+    }
+
+    (processed, errors)
+}
+
 pub fn pipeline_processing_pattern() -> Result<Vec<ProcessedMessage>> {
     let messages = vec![
         RawMessage {
@@ -91,7 +112,9 @@ pub fn pipeline_processing_pattern() -> Result<Vec<ProcessedMessage>> {
                 .collect(),
         },
     ];
-    let processed_messages = process_message_batch(messages)?;
+    let processed_messages_with_failure = process_message_batch_with_failure(messages.clone());
+    println!("Processed messages: {:#?}", processed_messages_with_failure);
+    let processed_messages = process_message_batch(messages.clone())?;
     println!("Processed messages: {:#?}", processed_messages);
     Ok(processed_messages)
 }
