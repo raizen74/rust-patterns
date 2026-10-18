@@ -88,3 +88,39 @@ pub fn analyze_recent_subscriptions(
         .valid_subscriptions()
         .count_by_topic()
 }
+
+pub fn iterator_chaining_pattern() -> HashMap<String, usize> {
+    let events = vec![
+        SubscriptionEvent {
+            subscription_type: SubscriptionType::Subscribe,
+            topic: "topic1".to_string(),
+            user_id: 1,
+            timestamp: 1000,
+        },
+        SubscriptionEvent {
+            subscription_type: SubscriptionType::Subscribe,
+            topic: "topic2".to_string(),
+            user_id: 2,
+            timestamp: 2000,
+        },
+        SubscriptionEvent {
+            subscription_type: SubscriptionType::Unsubscribe,
+            topic: "topic1".to_string(),
+            user_id: 1,
+            timestamp: 3000,
+        },
+        SubscriptionEvent {
+            subscription_type: SubscriptionType::Invalid,
+            topic: "".to_string(),
+            user_id: 0,
+            timestamp: 4000,
+        },
+    ];
+    println!(
+        "Subscription stats: {:?}",
+        process_subscription_events(events.clone())
+    );
+    let analysis = analyze_recent_subscriptions(events, 1500);
+    println!("Recent subscriptions: {analysis:?}");
+    analysis
+}

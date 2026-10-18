@@ -9,9 +9,7 @@ mod type_classes;
 mod typestate;
 
 use closures::closures_pattern;
-use iterator_chaining::{
-    SubscriptionEvent, SubscriptionType, analyze_recent_subscriptions, process_subscription_events,
-};
+use iterator_chaining::iterator_chaining_pattern;
 use new_type::{ConsumerId, MessageId, TopicId};
 use parse_not_validate::{BrokerConfigBuilder, ConfigError};
 use pipeline::pipeline_processing_pattern;
@@ -77,41 +75,8 @@ fn main() {
     new_type_pattern(MessageId::new(42), topic_id).unwrap();
     parse_not_validate_pattern(100, 1024, 8080).unwrap();
     type_state_pattern().unwrap();
-    let events = vec![
-        SubscriptionEvent {
-            subscription_type: SubscriptionType::Subscribe,
-            topic: "topic1".to_string(),
-            user_id: 1,
-            timestamp: 1000,
-        },
-        SubscriptionEvent {
-            subscription_type: SubscriptionType::Subscribe,
-            topic: "topic2".to_string(),
-            user_id: 2,
-            timestamp: 2000,
-        },
-        SubscriptionEvent {
-            subscription_type: SubscriptionType::Unsubscribe,
-            topic: "topic1".to_string(),
-            user_id: 1,
-            timestamp: 3000,
-        },
-        SubscriptionEvent {
-            subscription_type: SubscriptionType::Invalid,
-            topic: "".to_string(),
-            user_id: 0,
-            timestamp: 4000,
-        },
-    ];
-    println!(
-        "Subscription stats: {:?}",
-        process_subscription_events(events.clone())
-    );
-    println!(
-        "Recent subscriptions: {:?}",
-        analyze_recent_subscriptions(events, 1500)
-    );
     type_classes_pattern();
+    iterator_chaining_pattern();
     closures_pattern();
     match pipeline_processing_pattern() {
         Ok(processed_messages) => {
